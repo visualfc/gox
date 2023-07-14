@@ -314,9 +314,10 @@ func (p *CodeBuilder) startStmtAt(stmt ast.Stmt) int {
 }
 
 // Usage:
-//   idx := cb.startStmtAt(stmt)
-//   ...
-//   cb.commitStmt(idx)
+//
+//	idx := cb.startStmtAt(stmt)
+//	...
+//	cb.commitStmt(idx)
 func (p *CodeBuilder) commitStmt(idx int) {
 	stmts := p.current.stmts
 	n := len(stmts) - 1
@@ -1616,6 +1617,10 @@ func denoteRecv(v *ast.SelectorExpr) *Element {
 
 func (p *CodeBuilder) method(
 	o methodList, name, aliasName string, flag MemberFlag, arg *Element, src ast.Node) (kind MemberKind) {
+	named, ok := o.(*types.Named)
+	if ok {
+		o = originNamed(named)
+	}
 	for i, n := 0, o.NumMethods(); i < n; i++ {
 		method := o.Method(i)
 		v := method.Name()
@@ -1627,7 +1632,7 @@ func (p *CodeBuilder) method(
 			}
 			p.stk.Ret(1, &internal.Elem{
 				Val:  selector(arg, v),
-				Type: methodTypeOf(typ),
+				Type: methodTypeOf(typ, named),
 				Src:  src,
 			})
 			if autoprop {
@@ -1699,19 +1704,6 @@ func (p *CodeBuilder) field(
 		return kind
 	}
 	return p.embeddedField(o, name, aliasName, flag, arg, src)
-}
-
-func methodTypeOf(typ types.Type) types.Type {
-	sig := typ.(*types.Signature)
-	switch t := sig.Recv().Type(); t.(type) {
-	case *overloadFuncType:
-		// is overload method
-		return typ
-	case *templateRecvMethodType:
-		// is template recv method
-		return t
-	}
-	return types.NewSignature(nil, sig.Params(), sig.Results(), sig.Variadic())
 }
 
 func indirect(typ types.Type) types.Type {
@@ -2059,9 +2051,9 @@ func (p *CodeBuilder) CompareNil(op token.Token, src ...ast.Node) *CodeBuilder {
 }
 
 // UnaryOp:
-//  - cb.UnaryOp(op token.Token)
-//  - cb.UnaryOp(op token.Token, twoValue bool)
-//  - cb.UnaryOp(op token.Token, twoValue bool, src ast.Node)
+//   - cb.UnaryOp(op token.Token)
+//   - cb.UnaryOp(op token.Token, twoValue bool)
+//   - cb.UnaryOp(op token.Token, twoValue bool, src ast.Node)
 func (p *CodeBuilder) UnaryOp(op token.Token, params ...interface{}) *CodeBuilder {
 	var src ast.Node
 	var flags InstrFlags
@@ -2194,14 +2186,17 @@ func (p *CodeBuilder) Else() *CodeBuilder {
 // <pre>
 // typeSwitch(name) init; expr typeAssertThen
 // type1, type2, ... typeN typeCase(N)
-//    ...
-//    end
+//
+//	...
+//	end
+//
 // type1, type2, ... typeM typeCase(M)
-//    ...
-//    end
+//
+//	...
+//	end
+//
 // end
 // </pre>
-//
 func (p *CodeBuilder) TypeSwitch(name string) *CodeBuilder {
 	if debugInstr {
 		log.Println("TypeSwitch")

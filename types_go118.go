@@ -440,3 +440,33 @@ func setTypeParams(pkg *Package, typ *types.Named, spec *ast.TypeSpec, tparams [
 func interfaceIsImplicit(t *types.Interface) bool {
 	return t.IsImplicit()
 }
+
+func originNamed(named *types.Named) *types.Named {
+	return named.Origin()
+}
+
+func methodTypeOf(typ types.Type, named *types.Named) types.Type {
+	sig := typ.(*types.Signature)
+	switch t := sig.Recv().Type().(type) {
+	case *overloadFuncType:
+		// is overload method
+		if named.TypeArgs() != nil {
+			oft := &overloadFuncType{}
+			for i := 0; i < named.NumMethods(); i++ {
+				mname := named.Method(i).Name()
+				for _, fn := range t.funcs {
+					if fn.Name() == mname {
+						oft.funcs = append(oft.funcs, named.Method(i))
+					}
+				}
+			}
+			recv := types.NewParam(token.NoPos, sig.Recv().Pkg(), "", oft)
+			return types.NewSignature(recv, sig.Params(), sig.Results(), sig.Variadic())
+		}
+		return typ
+	case *templateRecvMethodType:
+		// is template recv method
+		return t
+	}
+	return types.NewSignature(nil, sig.Params(), sig.Results(), sig.Variadic())
+}

@@ -150,3 +150,20 @@ func interfaceIsImplicit(t *types.Interface) bool {
 func toRecvType(pkg *Package, typ types.Type) ast.Expr {
 	return toType(pkg, typ)
 }
+
+func originNamed(named *types.Named) *types.Named {
+	return named
+}
+
+func methodTypeOf(typ types.Type, named *types.Named) types.Type {
+	sig := typ.(*types.Signature)
+	switch t := sig.Recv().Type().(type) {
+	case *overloadFuncType:
+		// is overload method
+		return typ
+	case *templateRecvMethodType:
+		// is template recv method
+		return t
+	}
+	return types.NewSignature(nil, sig.Params(), sig.Results(), sig.Variadic())
+}
