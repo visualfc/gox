@@ -55,7 +55,7 @@ func newFuncEx(pos token.Pos, pkg *types.Package, name string, t TyFuncEx) *type
 
 func newMethodEx(typ *types.Named, pos token.Pos, pkg *types.Package, name string, t TyFuncEx) *types.Func {
 	ofn := newFuncEx(pos, pkg, name, t)
-	typ.AddMethod(ofn)
+	//typ.AddMethod(ofn)
 	return ofn
 }
 

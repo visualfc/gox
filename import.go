@@ -28,12 +28,18 @@ import (
 // Ref type
 type Ref = types.Object
 
+type overloadData struct {
+	overloadFuncs   map[*types.Package][]*types.Func
+	overloadMethods map[types.Type][]*types.Func
+}
+
 // A PkgRef describes a Go package imported by others.
 type PkgRef struct {
 	// Types provides type information for the package.
 	// The NeedTypes LoadMode bit sets this field for packages matching the
 	// patterns; type information for dependencies may be missing or incomplete,
 	// unless NeedDeps and NeedImports are also set.
+	overloadData
 	Types *types.Package
 
 	nameRefs []*ast.Ident // for internal use
@@ -71,7 +77,18 @@ func (p *PkgRef) Ref(name string) Ref {
 // TryRef returns the object in this package with the given name if such an
 // object exists; otherwise it returns nil.
 func (p *PkgRef) TryRef(name string) Ref {
-	return p.Types.Scope().Lookup(name)
+	o := p.Types.Scope().Lookup(name)
+	if o == nil {
+		if funcs, ok := p.overloadFuncs[p.Types]; ok {
+			for _, fn := range funcs {
+				if fn.Name() == name {
+					o = fn
+					break
+				}
+			}
+		}
+	}
+	return o
 }
 
 // MarkForceUsed marks this package is force-used.
@@ -100,7 +117,7 @@ func isOverloadFunc(name string) bool {
 	return n > 3 && name[n-3:n-1] == "__"
 }
 
-func initThisGopPkg(pkg *types.Package) {
+func initThisGopPkg(this *Package, pkg *types.Package) {
 	scope := pkg.Scope()
 	if scope.Lookup(gopPackage) == nil { // not is a Go+ package
 		return
@@ -134,7 +151,7 @@ func initThisGopPkg(pkg *types.Package) {
 				}
 			}
 		} else {
-			checkTemplateMethod(pkg, name, o)
+			checkTemplateMethod(this, pkg, name, o)
 		}
 	}
 	for key, items := range overloads {
@@ -144,8 +161,9 @@ func initThisGopPkg(pkg *types.Package) {
 			log.Println("==> NewOverloadFunc", key)
 		}
 		o := NewOverloadFunc(token.NoPos, pkg, key, fns...)
-		scope.Insert(o)
-		checkTemplateMethod(pkg, key, o)
+		checkTemplateMethod(this, pkg, key, o)
+		//scope.Insert(o)
+		this.overloadFuncs[pkg] = append(this.overloadFuncs[pkg], o)
 	}
 	for key, items := range moverloads {
 		off := len(key.mthd) + 2
@@ -153,7 +171,8 @@ func initThisGopPkg(pkg *types.Package) {
 		if debugImport {
 			log.Println("==> NewOverloadMethod", key.named.Obj().Name(), key.mthd)
 		}
-		NewOverloadMethod(key.named, token.NoPos, pkg, key.mthd, fns...)
+		md := NewOverloadMethod(key.named, token.NoPos, pkg, key.mthd, fns...)
+		this.overloadMethods[key.named] = append(this.overloadMethods[key.named], md)
 	}
 }
 
@@ -162,7 +181,7 @@ const (
 	gopPackage = "GopPackage"
 )
 
-func checkTemplateMethod(pkg *types.Package, name string, o types.Object) {
+func checkTemplateMethod(this *Package, pkg *types.Package, name string, o types.Object) {
 	if strings.HasPrefix(name, goptPrefix) {
 		name = name[len(goptPrefix):]
 		if pos := strings.Index(name, "_"); pos > 0 {
@@ -173,7 +192,8 @@ func checkTemplateMethod(pkg *types.Package, name string, o types.Object) {
 						if debugImport {
 							log.Println("==> NewTemplateRecvMethod", tname, mname)
 						}
-						NewTemplateRecvMethod(t, token.NoPos, pkg, mname, o)
+						fn := NewTemplateRecvMethod(t, token.NoPos, pkg, mname, o)
+						this.overloadMethods[t] = append(this.overloadMethods[t], fn)
 					}
 				}
 			}
@@ -220,7 +240,7 @@ func NewContext() *Context {
 }
 
 // InitGopPkg initializes a Go+ packages.
-func (p *Context) InitGopPkg(importer types.Importer, pkgImp *types.Package) {
+func (p *Context) InitGopPkg(this *Package, importer types.Importer, pkgImp *types.Package) {
 	pkgPath := pkgImp.Path()
 	if stdpkg[pkgPath] || p.chkGopImports[pkgPath] {
 		return
@@ -228,10 +248,10 @@ func (p *Context) InitGopPkg(importer types.Importer, pkgImp *types.Package) {
 	if !pkgImp.Complete() {
 		importer.Import(pkgPath)
 	}
-	initThisGopPkg(pkgImp)
+	initThisGopPkg(this, pkgImp)
 	p.chkGopImports[pkgPath] = true
 	for _, imp := range pkgImp.Imports() {
-		p.InitGopPkg(importer, imp)
+		p.InitGopPkg(this, importer, imp)
 	}
 }
 
