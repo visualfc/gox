@@ -363,8 +363,8 @@ var (
 	}
 )
 
-func lookupName(this *Package, pkg *types.Package, scope *types.Scope, name string) types.Object {
-	if obj := scope.Lookup(name); obj != nil {
+func lookupName(this *Package, pkg *types.Package, name string) types.Object {
+	if obj := pkg.Scope().Lookup(name); obj != nil {
 		return obj
 	}
 	return this.FindOverload(pkg, name)
@@ -376,7 +376,7 @@ func assignable(pkg *Package, v types.Type, t *types.Named, pv *internal.Elem) b
 		tname := o.Name()
 		scope := at.Scope()
 		name := tname + "_Init"
-		if ini := lookupName(pkg, at, scope, name); ini != nil {
+		if ini := lookupName(pkg, at, name); ini != nil {
 			if v == types.Typ[types.UntypedInt] {
 				switch t {
 				case pkg.utBigInt, pkg.utBigRat:

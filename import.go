@@ -162,7 +162,6 @@ func initThisGopPkg(this *Package, pkg *types.Package) {
 		}
 		o := NewOverloadFunc(token.NoPos, pkg, key, fns...)
 		checkTemplateMethod(this, pkg, key, o)
-		//scope.Insert(o)
 		this.overloadFuncs[pkg] = append(this.overloadFuncs[pkg], o)
 	}
 	for key, items := range moverloads {

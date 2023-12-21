@@ -1589,7 +1589,7 @@ func getUnderlying(pkg *Package, typ types.Type) types.Type {
 }
 
 type proxyList struct {
-	org     methodList
+	methodList
 	methods []*types.Func
 	numOrg  int
 	numMax  int
@@ -1600,12 +1600,12 @@ func (p *proxyList) NumMethods() int {
 }
 func (p *proxyList) Method(i int) *types.Func {
 	if i < p.numOrg {
-		return p.org.Method(i)
+		return p.methodList.Method(i)
 	}
 	return p.methods[i-p.numOrg]
 }
 
-func ExtMethodList(pkg *Package, typ *types.Named) methodList {
+func ExtMethodList(pkg *Package, typ methodList) methodList {
 	if m, ok := pkg.overloadMethods[typ]; ok {
 		return &proxyList{typ, m, typ.NumMethods(), typ.NumMethods() + len(m)}
 	}
@@ -1628,7 +1628,7 @@ retry:
 					return kind
 				}
 			}
-			if kind := p.method(ExtMethodList(p.pkg, t), name, aliasName, flag, arg, srcExpr); kind != MemberInvalid {
+			if kind := p.method(t, name, aliasName, flag, arg, srcExpr); kind != MemberInvalid {
 				return kind
 			}
 			if fstruc {
@@ -1644,7 +1644,7 @@ retry:
 		}
 	case *types.Named:
 		named, typ = o, p.getUnderlying(o) // may cause to loadNamed (delay-loaded)
-		if kind := p.method(ExtMethodList(p.pkg, o), name, aliasName, flag, arg, srcExpr); kind != MemberInvalid {
+		if kind := p.method(o, name, aliasName, flag, arg, srcExpr); kind != MemberInvalid {
 			return kind
 		}
 		if _, ok := typ.(*types.Struct); ok {
@@ -1670,6 +1670,7 @@ retry:
 }
 
 type methodList interface {
+	types.Type
 	NumMethods() int
 	Method(i int) *types.Func
 }
@@ -1697,6 +1698,7 @@ func (p *CodeBuilder) allowAccess(pkg *types.Package, name string) bool {
 
 func (p *CodeBuilder) method(
 	o methodList, name, aliasName string, flag MemberFlag, arg *Element, src ast.Node) (kind MemberKind) {
+	o = ExtMethodList(p.pkg, o)
 	for i, n := 0, o.NumMethods(); i < n; i++ {
 		method := o.Method(i)
 		v := method.Name()
@@ -1837,8 +1839,7 @@ func (p *CodeBuilder) IncDec(op token.Token, src ...ast.Node) *CodeBuilder {
 			return p
 		}
 	}
-	//fn := pkg.builtin.Scope().Lookup(name)
-	fn := lookupName(pkg, pkg.builtin, pkg.builtin.Scope(), name)
+	fn := lookupName(pkg, pkg.builtin, name)
 	if fn == nil {
 		panic("TODO: operator not matched")
 	}
@@ -1908,8 +1909,7 @@ func callAssignOp(pkg *Package, tok token.Token, args []*internal.Elem, src []as
 			return &ast.ExprStmt{X: ret.Val}
 		}
 	}
-	//op := pkg.builtin.Scope().Lookup(name)
-	op := lookupName(pkg, pkg.builtin, pkg.builtin.Scope(), name)
+	op := lookupName(pkg, pkg.builtin, name)
 	if op == nil {
 		panic("TODO: operator not matched")
 	}
@@ -2091,8 +2091,7 @@ retry:
 		}
 		return
 	}
-	//lm := pkg.builtin.Scope().Lookup(name)
-	lm := lookupName(pkg, pkg.builtin, pkg.builtin.Scope(), name)
+	lm := lookupName(pkg, pkg.builtin, name)
 	if lm == nil {
 		panic("TODO: operator not matched")
 	}
